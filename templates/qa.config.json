@@ -1,0 +1,14 @@
+{
+  "minContrast": 4.5,
+  "centerTolerancePx": 4,
+  "edgePx": 6,
+  "bgMinMean": 0.6,
+  "minReadablePx": 40,
+  "safeZones": "warn",
+  "sampleFractions": [0.3, 0.55, 0.8, 0.94],
+  "forbidden": [
+    { "pattern": "(?<![A-Za-z0-9_])X(?![A-Za-z0-9_])", "label": "X（平台名）" },
+    "Twitter", "推特", "刷到", "搬运", "点赞", "关注", "评论区见", "三连", "转发抽奖"
+  ],
+  "coAppear": []
+}

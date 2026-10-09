@@ -1,0 +1,49 @@
+{
+  "schema": "xms/themes-v1",
+  "presets": {
+    "xhs-9x16": {
+      "width": 1080, "height": 1920, "fps": 30, "margin": 60,
+      "uiZones": {
+        "top":    {"x": 0,   "y": 0,    "w": 1080, "h": 140, "note": "状态栏 / 返回 / 分享"},
+        "bottom": {"x": 0,   "y": 1660, "w": 1080, "h": 260, "note": "作者 / 文案 / 互动栏"},
+        "right":  {"x": 960, "y": 1000, "w": 120,  "h": 660, "note": "点赞 / 收藏 / 评论按钮列"}
+      },
+      "type": {"title": [96, 124], "body": [52, 64], "minReadable": 40}
+    },
+    "cover-3x4": {"width": 1080, "height": 1440, "fromPreset": "xhs-9x16", "cropY": 240}
+  },
+  "contrastPairs": [
+    ["ink", "paper2"], ["support", "paper2"], ["accentText", "paper2"], ["accentText", "panel"],
+    ["second", "paper2"], ["third", "paper2"], ["support", "card"], ["ink", "accent"],
+    ["onDark", "second"], ["onDark", "third"], ["accentOnDark", "third"], ["onDarkSoft", "third"]
+  ],
+  "themes": {
+    "editorial-amber": {
+      "label": "暖纸编辑风（默认）",
+      "paper": "#F4F1EA", "paper2": "#EDE6D8", "panel": "#FBF9F4", "card": "#FFFFFF",
+      "ink": "#16181D", "support": "#4A4F57",
+      "accent": "#E85D04", "accentText": "#B93D08", "accentOnDark": "#F59A4A",
+      "second": "#1F4E5F", "third": "#24324A",
+      "line": "#D9D1C1", "mute": "#CFC6B4", "onDark": "#FFFFFF", "onDarkSoft": "#E7E3DA",
+      "halo": "rgba(250,248,243,0.92)", "warm": "#F2A65A"
+    },
+    "mint-notes": {
+      "label": "薄荷笔记风",
+      "paper": "#F1F6F2", "paper2": "#E3EEE6", "panel": "#F9FCFA", "card": "#FFFFFF",
+      "ink": "#132019", "support": "#44524B",
+      "accent": "#1FA77F", "accentText": "#0B6F52", "accentOnDark": "#7BE3BF",
+      "second": "#2D4A8A", "third": "#2A2F4F",
+      "line": "#CFDDD3", "mute": "#BFD0C5", "onDark": "#FFFFFF", "onDarkSoft": "#E2E8F0",
+      "halo": "rgba(247,251,248,0.92)", "warm": "#F2B84B"
+    },
+    "sky-memo": {
+      "label": "晴空便签风",
+      "paper": "#F2F5FA", "paper2": "#E4EAF4", "panel": "#F8FAFD", "card": "#FFFFFF",
+      "ink": "#141A26", "support": "#475063",
+      "accent": "#5B93F6", "accentText": "#1F4FBF", "accentOnDark": "#9CC0FF",
+      "second": "#B4400B", "third": "#1E293B",
+      "line": "#D3DCEA", "mute": "#C3CEDF", "onDark": "#FFFFFF", "onDarkSoft": "#E2E8F0",
+      "halo": "rgba(246,248,252,0.92)", "warm": "#F5A524"
+    }
+  }
+}

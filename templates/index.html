@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>XMS preview</title><link rel="icon" href="data:,">
+<style>
+html,body{margin:0;height:100%;background:#E9E5DC}
+body{display:grid;place-items:center}
+#xms-canvas{display:block;max-width:100vw;max-height:100vh;width:auto;height:auto;box-shadow:0 10px 40px rgba(0,0,0,.12)}
+#xms-controls{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);display:flex;gap:12px;align-items:center;padding:8px 16px;border-radius:999px;background:rgba(22,24,29,.85);color:#fff;font:14px system-ui,sans-serif}
+#xms-controls button{border:0;border-radius:999px;width:34px;height:34px;background:#E85D04;color:#fff;cursor:pointer}
+#xms-controls input{width:40vw}
+.export #xms-controls{display:none}
+.export{background:transparent}
+</style>
+</head>
+<body>
+<canvas id="xms-canvas"></canvas>
+<div id="xms-controls"><button type="button">▶</button><input type="range" min="0" value="0" step="1" aria-label="frame"><span></span></div>
+<audio preload="none"></audio>
+<script src="lib/xms-core.js"></script>
+<script src="lib/xms-type.js"></script>
+<script src="lib/xms-fx.js"></script>
+<script src="shots.js"></script>
+</body>
+</html>

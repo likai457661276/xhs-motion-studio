@@ -1,0 +1,28 @@
+# renders & intermediate frames
+*.mp4
+*.mov
+*.webm
+*.wav
+*.png
+*.jpg
+!docs/**/*.png
+!docs/**/*.jpg
+build/
+frames/
+chunks/
+.xms/
+# dependencies & environments
+node_modules/
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+# fonts are extracted per project (OFL, not bundled here)
+*.otf
+*.ttf
+*.ttc
+# editors / OS
+.DS_Store
+.idea/
+.vscode/
