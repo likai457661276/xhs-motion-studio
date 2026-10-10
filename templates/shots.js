@@ -1,6 +1,10 @@
 /* shots.js — scene drawing for this project (XHS Motion Studio template).
  * Rules: draw everything from (a.t / a.T, a.scene, a.timeline.seed); no Math.random, no Date, no state across frames.
  * On-screen copy lives in storyboard.json (titleLines / sub / segment) so the QA scanner sees all of it.
+ * Illustrative visuals: flag the scene (`"illustrative": true` in storyboard.json) or the element
+ *   (fx.chart / fx.candles / fx.bars / fx.image with { illustrative: true }) → the runtime adds the 「示意画面」 badge.
+ *   Charts with real numbers pass { dataSource: '出处' } instead.
+ * Image layers: declare storyboard `images`, then fx.image(ctx, a.t, '<id>', { x, y, w, at, enter: 'bounce', float: 10 }).
  */
 (() => {
 const { fx, type } = XMS;

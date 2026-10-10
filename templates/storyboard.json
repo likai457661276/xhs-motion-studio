@@ -2,14 +2,49 @@
   "schema": "xms/storyboard-v1",
   "title": "示例：三步看懂一个新功能",
   "preset": "xhs-9x16",
-  "theme": "editorial-amber",
+  "factBoundary": {
+    "real": [
+      "功能名称与上线时间（官方公告原文）"
+    ],
+    "illustrative": [
+      "机器人图标、动效与示意图形只表达概念，不代表真实界面"
+    ],
+    "unverified": [],
+    "sources": [
+      {
+        "name": "官方公告",
+        "url": "https://example.com/announcement",
+        "date": "2026-01-01"
+      }
+    ]
+  },
   "fps": 30,
   "seed": 20260101,
-  "fonts": { "regular": "fonts/NotoSansCJKsc-Regular.otf", "bold": "fonts/NotoSansCJKsc-Bold.otf" },
-  "music": { "file": "audio/bgm.wav", "gain": 0.9, "bpm": 120, "key": "A minor", "mood": "bright", "energy": 0.8 },
+  "fonts": {
+    "regular": "fonts/NotoSansCJKsc-Regular.otf",
+    "bold": "fonts/NotoSansCJKsc-Bold.otf"
+  },
+  "music": {
+    "file": "audio/bgm.wav",
+    "gain": 0.9,
+    "bpm": 120,
+    "key": "A minor",
+    "mood": "bright",
+    "energy": 0.8
+  },
+  "master": {
+    "lufs": -14,
+    "truePeak": -1.5,
+    "tolerance": 0.5
+  },
+  "images": [],
+  "illustrativeLabel": {
+    "text": "示意画面",
+    "corner": "top-right"
+  },
   "scenes": [
-    { "id": "s01-hook", "seconds": 4, "segment": "新功能速览", "titleLines": ["一句话：", "它能{替你干活}了"], "hits": [1.0], "heavy": [], "motif": "chat", "tint": "accent", "music": "intro" },
-    { "id": "s02-point", "seconds": 6, "segment": "① 能做什么", "titleLines": ["三件事", "{一次}搞定"], "sub": "整理 · 计算 · 汇报", "hits": [1.0, 1.5, 2.0, 4.0], "heavy": [4.0], "motif": "dots", "tint": "second", "music": "drive" },
-    { "id": "s03-ending", "seconds": 6, "segment": "新功能速览", "titleLines": ["工具在变，", "{判断}还得靠你"], "sub": "信息来源：官方公告", "hits": [2.0], "heavy": [2.0], "motif": "lines", "tint": "accent", "music": "outro" }
+    {"id": "s01-hook", "seconds": 4, "segment": "新功能速览", "titleLines": ["一句话：", "它能{替你干活}了"], "hits": [1.0], "heavy": [], "motif": "chat", "tint": "accent", "music": "intro"},
+    {"id": "s02-point", "seconds": 6, "segment": "① 能做什么", "titleLines": ["三件事", "{一次}搞定"], "sub": "整理 · 计算 · 汇报", "hits": [1.0, 1.5, 2.0, 4.0], "heavy": [4.0], "motif": "dots", "tint": "second", "music": "drive"},
+    {"id": "s03-ending", "seconds": 6, "segment": "新功能速览", "titleLines": ["工具在变，", "{判断}还得靠你"], "sub": "信息来源：官方公告", "hits": [2.0], "heavy": [2.0], "motif": "lines", "tint": "accent", "music": "outro"}
   ]
 }

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /* xms-render.cjs — XHS Motion Studio frame renderer (MIT License).
- * node xms-render.cjs <project> --mode preview|render|qa|cover|serve [--draft] [--workers N] [--chunk 150] [--resume] [--quality .94] [--jpeg|--lossless] [--frame N]
+ * node xms-render.cjs <project> --mode preview|render|qa|cover|serve|styles [--draft] [--workers N] [--chunk 150] [--resume] [--quality .94] [--jpeg|--lossless] [--frame N]
  *   capture: final renders use lossless PNG frames, drafts use JPEG q.94 (faster); override with --jpeg / --lossless
+ *   styles: --frame N --styles a,b,c --out sheet.png — the same frame under each style preset, composed into one labelled sheet
  * Normally invoked through `xms.py`, which compiles the timeline first.
  *
  * Design: one localhost-only static server per run; N independent headless browsers; each frame is drawn by
@@ -125,9 +126,10 @@ async function main() {
   }
   const pw = loadPlaywright();
   const { srv, url, served, errors } = await serve(lockAssets);
-  const n = opt.mode === 'cover' ? 1 : opt.mode === 'preview' ? Math.max(2, Math.min(WORKERS, 2)) : WORKERS;
+  const styleList = opt.mode === 'styles' ? String(opt.styles || '').split(',').filter(Boolean) : null;
+  const n = styleList ? styleList.length : opt.mode === 'cover' ? 1 : opt.mode === 'preview' ? Math.max(2, Math.min(WORKERS, 2)) : WORKERS;
   const t0 = Date.now();
-  const workers = await Promise.all(Array.from({ length: n }, (_, i) => openWorker(pw, url, i)));
+  const workers = await Promise.all(Array.from({ length: n }, (_, i) => openWorker(pw, styleList ? `${url}&style=${encodeURIComponent(styleList[i])}` : url, i)));
   const meta = workers[0].meta;
   if (meta.totalFrames !== tl.totalFrames) throw Error('page meta disagrees with timeline');
   if (meta.themeIssues && meta.themeIssues.length) log('warning: theme contrast issues', JSON.stringify(meta.themeIssues));
@@ -140,6 +142,7 @@ async function main() {
     else if (opt.mode === 'preview') await doPreview(tl, workers, guard);
     else if (opt.mode === 'qa') await doQA(tl, workers, guard, sources);
     else if (opt.mode === 'cover') await doCover(tl, workers[0], guard);
+    else if (opt.mode === 'styles') await doStyles(tl, workers, styleList, guard);
     else throw Error('unknown mode ' + opt.mode);
     guard();
   } finally {
@@ -235,8 +238,10 @@ async function doQA(tl, workers, guard, sources) {
   const fr = cfg.sampleFractions || [0.3, 0.55, 0.8, 0.94];
   // 1) text-run log for every frame (geometry from the real draw calls)
   const t0 = Date.now(); const out = new Array(tl.totalFrames); let next = 0;
-  await Promise.all(workers.map(async w => { for (let f; (f = next++) < tl.totalFrames;) out[f] = await w.page.evaluate(f => XMS.qaFrame(f), f); }));
-  await fsp.writeFile(path.join(dir, 'runs.jsonl'), out.map((runs, f) => JSON.stringify({ frame: f, runs })).join('\n') + '\n');
+  // per frame: text runs + what had to be disclosed (示意 / AI badges) + chart-like fx and whether they cite a source or are flagged 示意
+  await Promise.all(workers.map(async w => { for (let f; (f = next++) < tl.totalFrames;)
+    out[f] = await w.page.evaluate(async f => ({ runs: await XMS.qaFrame(f), need: XMS.lastNeed, charts: XMS.lastCharts }), f); }));
+  await fsp.writeFile(path.join(dir, 'runs.jsonl'), out.map((r, f) => JSON.stringify({ frame: f, ...r })).join('\n') + '\n');
   guard();
   // 2) sampled frame pairs: normal + text-suppressed (background only) for contrast / centering / edge checks
   const samples = [];
@@ -270,8 +275,44 @@ async function doCover(tl, w, guard) {
   const cut = runs.filter(r => r.box[1] < y || r.box[3] > y + h).map(r => r.text);
   await fsp.writeFile(path.join(OUT, 'cover-3x4.png'), b64(await w.page.evaluate(([f, y, h]) => XMS.crop(f, y, h), [f, y, h])));
   guard();
+  const badges = await w.page.evaluate(() => (XMS.coverBadges || []).map(b => b.text));
+  if (badges.length) log('cover labels: ' + badges.map(b => `「${b}」`).join(' '));
   log(`cover 3:4 (${tl.width}×${h}, crop y=${y}) from frame ${f} → ${path.relative(ROOT, path.join(OUT, 'cover-3x4.png'))}`);
   if (cut.length) log('warning: outside the 3:4 crop: ' + JSON.stringify(cut) + ' (choose another --frame or --crop-y)');
+}
+
+async function doStyles(tl, workers, list, guard) {
+  const f = Math.max(0, Math.min(tl.totalFrames - 1, +(opt.frame || 0)));
+  const themes = JSON.parse(fs.readFileSync(path.join(ROOT, 'lib/themes.json'), 'utf8'));
+  const shots = await Promise.all(workers.map(w => w.page.evaluate(f => XMS.capture(f, 'image/png'), f)));
+  guard();
+  const panels = list.map((id, i) => ({ letter: 'ABCD'[i], id, label: themes.styles[id].label, en: themes.styles[id].en || '', note: themes.styles[id].note || '', png: shots[i] }));
+  // compose in the page (project fonts are already loaded there): one row of panels with A/B/C headers
+  const sheet = await workers[0].page.evaluate(async ({ panels, title, W, H }) => {
+    const pw = 540, ph = Math.round(H * pw / W), pad = 40, head = 150, lab = 128, foot = 90;
+    const c = document.createElement('canvas'); c.width = panels.length * pw + (panels.length + 1) * pad; c.height = head + lab + ph + foot + pad;
+    const g = c.getContext('2d'); g.fillStyle = '#ECE8DF'; g.fillRect(0, 0, c.width, c.height);
+    g.fillStyle = '#16181D'; g.textBaseline = 'middle'; g.font = XMS.font(700, 52); g.fillText('画风三选一', pad, 62);
+    g.font = XMS.font(400, 28); g.fillStyle = '#4A4F57'; g.fillText(title, pad, 116);
+    for (const [i, p] of panels.entries()) {
+      const x = pad + i * (pw + pad), y = head;
+      const img = new Image(); img.src = 'data:image/png;base64,' + p.png; await img.decode();
+      g.fillStyle = '#16181D'; g.beginPath(); g.arc(x + 34, y + 38, 34, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#FFFFFF'; g.font = XMS.font(700, 42); g.textAlign = 'center'; g.fillText(p.letter, x + 34, y + 40); g.textAlign = 'left';
+      g.fillStyle = '#16181D'; g.font = XMS.font(700, 40); g.fillText(p.label, x + 86, y + 26);
+      g.fillStyle = '#4A4F57'; g.font = XMS.font(400, 24); g.fillText(`${p.id} · ${p.en}`, x + 86, y + 66);
+      g.fillText(p.note, x, y + 108, pw);
+      g.save(); g.shadowColor = 'rgba(0,0,0,0.18)'; g.shadowBlur = 24; g.shadowOffsetY = 8; g.drawImage(img, x, y + lab, pw, ph); g.restore();
+    }
+    g.fillStyle = '#4A4F57'; g.font = XMS.font(400, 28);
+    g.fillText('回复 A / B / C 选择画风 → 写入 storyboard.json 的 "style"（未选择时定稿渲染会拒绝执行）', pad, c.height - pad - foot / 2 + 10);
+    return await new Promise(r => c.toBlob(b => { const fr = new FileReader(); fr.onload = () => r(String(fr.result).split(',')[1]); fr.readAsDataURL(b); }, 'image/png'));
+  }, { panels, title: `${tl.title} · 镜头 ${opt.shot || ''} · ${(f / tl.fps).toFixed(2)}s（第 ${f} 帧）`, W: tl.width, H: tl.height });
+  const out = path.resolve(opt.out || path.join(OUT, 'styles', 'styles.png'));
+  await fsp.mkdir(path.dirname(out), { recursive: true });
+  await fsp.writeFile(out, b64(sheet));
+  await fsp.writeFile(out.replace(/\.png$/, '.json'), JSON.stringify({ frame: f, shot: opt.shot || null, options: panels.map(({ png, ...p }) => p) }, null, 2) + '\n');
+  log(`style sheet (${list.join(' / ')}) from frame ${f} → ${path.relative(process.cwd(), out)}`);
 }
 
 main().catch(e => { console.error('[xms] ERROR', e.message || e); process.exit(1); });

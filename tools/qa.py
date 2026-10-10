@@ -9,7 +9,10 @@ Inputs   build/qa/runs.jsonl   every text run drawn on every frame (from the rea
 Checks   theme contrast pairs · per-run contrast against the real local background (halo composited) ·
          centering (layout + pixel) · edge cutoff / margin · overlaps · 小红书 UI safe zones ·
          background brightness · min readable size · forbidden words (all on-screen strings + storyboard.json) ·
-         must-co-appear rules on every frame
+         must-co-appear rules on every frame ·
+         disclosure: factBoundary present · 「示意画面」 badge visible on every illustrative frame, inside the safe
+         area (from the run log and from pixels) · chart-like fx without a dataSource / illustrative flag (warn) ·
+         a style preset was chosen
 Outputs  build/qa/qa-report.json, qa-report.md, contact-sheet.jpg; exit 1 when a check fails (final mode).
 """
 import argparse, collections, json, re, sys
@@ -24,7 +27,8 @@ DEFAULT = {
     'minContrast': 4.5, 'minVisibleAlpha': 0.9, 'centerTolerancePx': 4, 'edgePx': 6, 'bgMinMean': 0.6, 'minReadablePx': 40,
     'overlapMinFraction': 0.06, 'ignoreRoles': ['decor'], 'safeZones': 'warn',
     'forbidden': ['Twitter', '推特', '刷到', '搬运', '点赞', '关注', '评论区见', {'pattern': r'(?<![A-Za-z0-9_])X(?![A-Za-z0-9_])', 'label': 'X (platform)'}],
-    'coAppear': [], 'staticScanIgnoreKeys': ['id', 'file', 'path', 'schema', 'source', 'license', 'note', 'notes', 'fonts', 'music', 'motif', 'tint', 'theme', 'preset'],
+    'coAppear': [], 'staticScanIgnoreKeys': ['id', 'file', 'path', 'schema', 'source', 'license', 'note', 'notes', 'fonts', 'music', 'motif', 'tint', 'theme', 'preset',
+                             'style', 'src', 'prompt', 'corner', 'mode'],
 }
 
 
@@ -185,7 +189,7 @@ def main():
             elif b[0] < M - 2 or b[2] > W - M + 2: margin.setdefault((sid, r['text']), (f, b))
             for zn, z in zones.items():
                 if inter(b, [z['x'], z['y'], z['x'] + z['w'], z['y'] + z['h']]) > .1 * area(b): safe.setdefault((sid, r['text'], zn), f)
-            if r['size'] < cfg['minReadablePx']: small.setdefault((sid, r['text']), (f, r['size']))
+            if r['size'] < cfg['minReadablePx'] and not r['role'].startswith('badge'): small.setdefault((sid, r['text']), (f, r['size']))
         for i in range(len(runs)):
             for j in range(i + 1, len(runs)):
                 A, B = runs[i], runs[j]
@@ -204,6 +208,7 @@ def main():
     # 5 pixel checks on sample pairs
     halo_rgb, halo_a = parse_color(theme['halo'])
     con, cpx, edge, bright, rows = [], [], [], [], []
+    badge_px = {}  # frame → {role: changed pixels inside the badge box} (text-only difference mask)
     for smp in samples['samples']:
         f = smp['frame']
         full = np.asarray(Image.open(qd / 'samples' / f'{f}.png').convert('RGB'), dtype=np.int16)
@@ -214,6 +219,10 @@ def main():
         e = cfg['edgePx']
         if mask[:e].any() or mask[-e:].any() or mask[:, :e].any() or mask[:, -e:].any(): edge.append(f'{smp["scene"]} frame {f}: text pixels within {e}px of the frame edge')
         worst = None
+        for r in frames[f]['runs']:
+            if r['role'].startswith('badge-'):
+                x0, y0, x1, y1 = [max(0, int(v)) for v in r['box']]
+                badge_px.setdefault(f, {})[r['role']] = int(mask[y0:y1, x0:x1].sum())
         runs = [r for r in frames[f]['runs'] if r['role'] not in ignore and r['alpha'] >= vis]
         for r in runs:
             x0, y0, x1, y1 = [int(v) for v in r['box']]; x0, y0 = max(0, x0), max(0, y0); x1, y1 = min(W, x1), min(H, y1)
@@ -240,6 +249,8 @@ def main():
     add('edge-pixels', edge)
     add('background-brightness', bright, note=f'mean relative luminance ≥ {cfg["bgMinMean"]}')
 
+    disclosure(root, tl, frames, samples, badge_px, add, scene_of, W, H, M, zones, vis, fps, a.draft)
+
     fails = [k for k, v in checks.items() if v['level'] == 'fail' and not v['passed']]
     warns = [k for k, v in checks.items() if v['level'] == 'warn' and not v['passed']]
     rep = {'passed': not fails, 'draft': a.draft, 'timelineSha256': samples['timelineSha256'], 'sourceSha256': samples.get('sourceSha256'), 'lock': tl.get('lock'), 'frames': len(frames),
@@ -260,6 +271,51 @@ def main():
         for x in checks[k]['items'][:5]: print(f'  [{checks[k]["level"]}] {k}: {x}')
     print(f'report → {(qd / "qa-report.md").relative_to(root)} · contact sheet → {(qd / "contact-sheet.jpg").relative_to(root)}')
     sys.exit(1 if fails and not a.draft else 0)
+
+
+def disclosure(root, tl, frames, samples, badge_px, add, scene_of, W, H, M, zones, vis, fps, draft):
+    """Fact boundary, 示意画面 badge, chart sources, style choice."""
+    sb = xms.read(root / 'storyboard.json')
+    fb, bad = sb.get('factBoundary'), []
+    if not isinstance(fb, dict):
+        bad.append('storyboard.json has no "factBoundary" {real, illustrative, unverified, sources} — state what is sourced fact vs illustration')
+    else:
+        for k in ('real', 'illustrative', 'unverified', 'sources'):
+            if not isinstance(fb.get(k), list):
+                bad.append(f'factBoundary.{k} must be a list (use [] when empty)')
+        if isinstance(fb.get('sources'), list) and not fb['sources']:
+            bad.append('factBoundary.sources is empty — list the source of every factual claim')
+    add('fact-boundary', bad, note='real / illustrative / unverified / sources declared in storyboard.json')
+
+    labels = tl.get('labels') or {}
+    def inside_safe(b):
+        if b[0] < M - 2 or b[2] > W - M + 2 or b[1] < 0 or b[3] > H: return False
+        return not any(inter(b, [z['x'], z['y'], z['x'] + z['w'], z['y'] + z['h']]) > 0 for z in zones.values())
+    for role, key, check in (('badge-illustrative', 'illustrative', 'illustrative-label'),):
+        miss, unsafe, nreq = {}, {}, 0
+        for fr in frames:
+            if not (fr.get('need') or {}).get(key): continue
+            nreq += 1
+            bs = [r for r in fr['runs'] if r['role'] == role and r['alpha'] >= vis]
+            if not bs: miss.setdefault(scene_of(fr['frame']), []).append(fr['frame'])
+            elif not all(inside_safe(r['box']) for r in bs): unsafe.setdefault(scene_of(fr['frame']), fr['frame'])
+        items = [f'{s}: required 「{(labels.get(key) or {}).get("text", "")}」 missing on {len(fl)} frames, first {fl[0]} ({fl[0] / fps:.2f}s)' for s, fl in miss.items()]
+        items += [f'{s}: badge outside the safe area at frame {f}' for s, f in unsafe.items()]
+        for smp in samples['samples']:
+            need = (frames[smp['frame']].get('need') or {}).get(key)
+            px = badge_px.get(smp['frame'], {}).get(role)
+            if need and px is not None and px < 40:
+                items.append(f'{smp["scene"]} frame {smp["frame"]}: badge logged but only {px} label pixels visible')
+        add(check, items, note=f'{nreq} frames require it (shots/elements flagged illustrative); log + sampled pixels; must sit inside the safe area')
+
+    chart = {}
+    for fr in frames:
+        for c in fr.get('charts') or []:
+            if not c.get('covered'): chart.setdefault((scene_of(fr['frame']), c['kind']), fr['frame'])
+    add('chart-source', [f'{s}: chart-like fx "{k}" without dataSource or illustrative:true (first frame {f})' for (s, k), f in chart.items()], level='warn',
+        note='candles / bars / line charts must cite real data (dataSource) or be flagged illustrative (adds 「示意画面」)')
+    add('style-chosen', [] if tl.get('style') else ['storyboard.json "style" is not set — run `xms.py styles` and let the user pick'],
+        level='warn' if draft else 'fail', note=f'style preset: {tl.get("style") or "(none)"}')
 
 
 def sheet(qd, samples, rows, tl, root):

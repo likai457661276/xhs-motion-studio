@@ -2,6 +2,8 @@
 """xms — XHS Motion Studio pipeline CLI (MIT License). Standard library only.
 
   init      <proj> [--theme T] [--title S]   scaffold a project (templates + lib + fonts)
+  styles    <proj> --shot ID [--t SEC] [--styles a,b,c]  one key shot in 3 style presets → labelled A/B/C comparison sheet (pick before final)
+  cutout    <in.png> [--out OUT] [--threshold 238] [--feather 1.0] [--trim]   white background → alpha (tools/cutout.py, numpy+scipy+Pillow)
   fonts     <proj>                           extract Noto Sans CJK SC Regular/Bold faces into <proj>/fonts (needs fontTools)
   update-lib <proj>                          refresh <proj>/lib from this kit
   timeline  <proj> [--draft]                 compile storyboard.json → build/timeline.json (final, needs a current lock) or .xms/draft/timeline.json
@@ -16,15 +18,18 @@
   qa        <proj> [--draft]                 automated QA → build/qa/qa-report.{json,md} + contact sheet
   cover     <proj> --frame N [--crop-y Y]    3:4 cover still → build/cover-3x4.png (auto crop keeps the text in frame)
   serve     <proj> [--draft] [--port P]      interactive browser preview on 127.0.0.1 (scrub frames, play with music)
-  mix       <proj> [--draft]                 loudness-normalised music bed (-16 LUFS, TP -1.5)
+  mix       <proj> [--draft]                 two-pass loudness-normalised music bed (storyboard master: default -14 LUFS, TP -1.5 dBTP)
   finish    <proj> [--out FILE]              mux H.264 + AAC (faststart) after verifying render/mix bindings, then validate
-  validate  <file> [--project P]             technical delivery checks
+  validate  <file> [--project P]             technical delivery checks (loudness target ±tolerance, true peak)
 """
 import argparse, datetime, hashlib, json, os, re, shutil, subprocess, sys
 from pathlib import Path
 
 KIT = Path(__file__).resolve().parent.parent
 BOARD_SCHEMA, TL_SCHEMA, ASSET_SCHEMA = 'xms/storyboard-v1', 'xms/timeline-v1', 'xms/assets-v1'
+IMAGE_EXT = {'.png', '.webp', '.jpg', '.jpeg'}
+CORNERS = {'top-left', 'top-right', 'bottom-left', 'bottom-right'}
+MASTER_DEFAULT = {'lufs': -14.0, 'truePeak': -1.5, 'lra': 11.0, 'tolerance': 0.5}
 MEDIA_EXT = {'.otf', '.ttf', '.woff', '.woff2', '.wav', '.mp3', '.m4a', '.flac', '.png', '.jpg', '.jpeg', '.webp', '.svg', '.gif'}
 
 
@@ -75,7 +80,12 @@ def load_film(root):
     preset = themes['presets'].get(f.get('preset', 'xhs-9x16'))
     if not preset:
         raise XmsError(f'unknown preset {f.get("preset")}')
-    f.setdefault('preset', 'xhs-9x16'); f.setdefault('theme', 'editorial-amber')
+    f.setdefault('preset', 'xhs-9x16')
+    styles = themes.get('styles', {})
+    if f.get('style') and f['style'] not in styles:
+        raise XmsError(f'unknown style {f["style"]!r}; available: {", ".join(styles)}')
+    if 'theme' not in f:  # the chosen style brings its palette unless the storyboard pins a theme
+        f['theme'] = styles[f['style']]['theme'] if f.get('style') else 'editorial-amber'
     if f['theme'] not in themes['themes']:
         raise XmsError(f'unknown theme {f["theme"]}; available: {", ".join(themes["themes"])}')
     f.setdefault('width', preset['width']); f.setdefault('height', preset['height']); f.setdefault('fps', preset.get('fps', 30))
@@ -100,7 +110,42 @@ def load_film(root):
         for h in s.get('heavy', []):
             if h not in s.get('hits', []):
                 raise XmsError(f'{sid}: heavy {h} must also be listed in hits')
+        ill = s.get('illustrative')
+        if ill not in (None, True, False):
+            for w in (ill if isinstance(ill, list) else [ill]):
+                if not isinstance(w, dict) or not all(isinstance(w.get(k, 0), (int, float)) for k in ('from', 'to')):
+                    raise XmsError(f'{sid}.illustrative must be true or {{"from": s, "to": s}} (or a list of them)')
+    fb = f.get('factBoundary')
+    if fb is not None and not isinstance(fb, dict):
+        raise XmsError('factBoundary must be an object {real, illustrative, unverified, sources}')
+    seen = set()
+    for im in f.setdefault('images', []):
+        iid, src = im.get('id', ''), im.get('src', '')
+        if not re.fullmatch(r'[a-z0-9][a-z0-9_-]*', iid) or iid in seen:
+            raise XmsError(f'image id must be unique lower-case: {iid!r}')
+        seen.add(iid)
+        if Path(src).suffix.lower() not in IMAGE_EXT:
+            raise XmsError(f'image {iid}: src must be a .png/.webp/.jpg file inside the project (got {src!r})')
+        if im.get('ai') and not str(im.get('prompt') or '').strip():
+            raise XmsError(f'image {iid}: ai:true images must keep the generation prompt in "prompt"')
+    m = dict(MASTER_DEFAULT, **(f.get('master') or {}))
+    if not (-30 <= m['lufs'] <= -8 and -6 <= m['truePeak'] <= -0.1 and 0 < m['tolerance'] <= 2):
+        raise XmsError(f'master out of range: {m}')
+    f['master'] = m
+    f['_labels'] = resolve_labels(f)
     return f
+
+
+def resolve_labels(f):
+    """illustrativeLabel: {"enabled": true, "text": "示意画面", "corner": "top-right", "opacity": 0.92}"""
+    il = dict({'enabled': True, 'text': '示意画面', 'corner': 'top-right', 'opacity': 0.92}, **(f.get('illustrativeLabel') or {}))
+    if il['corner'] not in CORNERS:
+        raise XmsError(f'illustrativeLabel.corner must be one of {sorted(CORNERS)}')
+    if not 0.6 <= float(il['opacity']) <= 1:
+        raise XmsError('illustrativeLabel.opacity must be within [0.6, 1] (legible but unobtrusive)')
+    if not str(il['text']).strip():
+        raise XmsError('illustrativeLabel.text must not be empty')
+    return {'illustrative': il}
 
 
 def media_paths(film):
@@ -108,11 +153,15 @@ def media_paths(film):
     if film.get('music', {}).get('file'):
         out.append(film['music']['file'])
     out += film.get('media', [])
+    out += [im['src'] for im in film.get('images', [])]
     return out
 
 
 def compile_timeline(root, draft=False):
     film = load_film(root)
+    if not draft and not film.get('style'):
+        raise XmsError('no style chosen: run `xms.py styles <proj> --shot <id>`, show the A/B/C sheet to the user, '
+                       'then set storyboard.json "style" to the picked preset (drafts work without it)')
     lock = None if draft else gate(root)
     fps, cur, scenes, cues, heavy = film['fps'], 0, [], [], []
     for i, s in enumerate(film['scenes']):
@@ -133,7 +182,9 @@ def compile_timeline(root, draft=False):
           'title': film.get('title', ''), 'preset': film['preset'], 'theme': film['theme'], 'themeOverrides': film.get('themeOverrides', {}),
           'width': film['width'], 'height': film['height'], 'fps': fps, 'seed': film['seed'], 'fonts': film['fonts'], 'music': music,
           'totalFrames': cur, 'durationSeconds': cur / fps, 'scenes': scenes, 'cues': cues, 'heavyAbs': heavy,
-          'previewAudio': 'preview-audio.wav' if music.get('file') else None}
+          'previewAudio': 'preview-audio.wav' if music.get('file') else None,
+          'style': film.get('style'), 'images': [{'id': im['id'], 'src': im['src']} for im in film['images']],
+          'labels': film['_labels'], 'master': film['master']}
     out = root / ('.xms/draft/timeline.json' if draft else 'build/timeline.json')
     write(out, tl)
     return tl, out
@@ -241,7 +292,8 @@ def gate(root):
 
 
 # ---------------------------------------------------------------- audio
-def loudnorm(src_filter_inputs, filt, out, dur, target=-16.0, tp=-1.5, lra=11.0):
+def loudnorm(src_filter_inputs, filt, out, dur, target=-14.0, tp=-1.5, lra=11.0):
+    """Two-pass EBU R128 normalisation: pass 1 measures, pass 2 applies the measured values (linear when possible)."""
     base = ['ffmpeg', '-hide_banner', '-y'] + src_filter_inputs
     first = subprocess.run(base + ['-filter_complex', f'{filt},loudnorm=I={target}:TP={tp}:LRA={lra}:print_format=json[o]', '-map', '[o]', '-f', 'null', '-'],
                            capture_output=True, text=True, check=True).stderr
@@ -252,7 +304,7 @@ def loudnorm(src_filter_inputs, filt, out, dur, target=-16.0, tp=-1.5, lra=11.0)
     return m
 
 
-def mix(root, draft=False):
+def mix(root, draft=False, tp_margin=0.0):
     if draft:
         tl, tlp = compile_timeline(root, True); out = root / '.xms/draft/mix.wav'
     else:
@@ -266,13 +318,14 @@ def mix(root, draft=False):
             raise XmsError(f'music file missing: {music["file"]} (run `xms.py bgm`)')
         inputs = ['-i', str(src)]
         filt = f'[0:a]aresample=48000,aformat=channel_layouts=stereo,volume={music.get("gain", 1.0)},lowpass=f=16000:p=2,apad=whole_dur={dur:.6f},atrim=0:{dur:.6f}'
-        m = loudnorm(inputs, filt, out, dur)
+        ms = tl['master']
+        m = loudnorm(inputs, filt, out, dur, target=ms['lufs'], tp=round(ms['truePeak'] - tp_margin, 2), lra=ms['lra'])
     else:
         run(['ffmpeg', '-hide_banner', '-y', '-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo', '-t', f'{dur:.6f}', '-c:a', 'pcm_s16le', out], capture_output=True); m = None
     rep = {'timelineSha256': sha(tlp), 'lock': tl['lock'], 'input': music.get('file'), 'inputSha256': sha(inside(root, music['file'])) if music.get('file') else None,
-           'mixSha256': sha(out), 'durationSeconds': dur, 'loudnormFirstPass': m}
+           'mixSha256': sha(out), 'durationSeconds': dur, 'master': tl['master'], 'truePeakMargin': tp_margin, 'loudnormFirstPass': m}
     write(out.with_name('mix-report.json'), rep)
-    print(f'mix → {out.relative_to(root)}')
+    print(f'mix → {out.relative_to(root)} (target {tl["master"]["lufs"]} LUFS, TP ≤ {tl["master"]["truePeak"] - tp_margin:.2f} dBTP)')
     return rep
 
 
@@ -293,6 +346,13 @@ def moov_first(path):
     return False
 
 
+def loudness(path):
+    """→ (integrated LUFS, true peak dBTP) of a media file's audio, via ffmpeg ebur128."""
+    out = subprocess.run(['ffmpeg', '-hide_banner', '-i', str(path), '-vn', '-af', 'ebur128=peak=true', '-f', 'null', '-'], capture_output=True, text=True).stderr
+    I = re.findall(r'I:\s+(-?[\d.]+) LUFS', out); P = re.findall(r'Peak:\s+(-?[\d.]+) dBFS', out)
+    return (float(I[-1]) if I else None), (float(P[-1]) if P else None)
+
+
 def validate(path, root=None):
     path = Path(path)
     m = json.loads(subprocess.check_output(['ffprobe', '-v', 'error', '-show_streams', '-show_format', '-of', 'json', str(path)]))
@@ -311,14 +371,18 @@ def validate(path, root=None):
             if s and abs(float(s['duration']) - tl['durationSeconds']) > max(1 / tl['fps'], .05): problems.append(f'{s["codec_type"]} duration {s["duration"]} != {tl["durationSeconds"]}')
     dec = subprocess.run(['ffmpeg', '-v', 'error', '-i', str(path), '-f', 'null', '-'], capture_output=True, text=True)
     if dec.stderr.strip(): problems.append('decode errors: ' + dec.stderr.strip()[:400])
-    loud = subprocess.run(['ffmpeg', '-hide_banner', '-i', str(path), '-vn', '-af', 'ebur128=peak=true', '-f', 'null', '-'], capture_output=True, text=True).stderr
-    I = re.findall(r'I:\s+(-?[\d.]+) LUFS', loud); P = re.findall(r'Peak:\s+(-?[\d.]+) dBFS', loud)
-    peak = float(P[-1]) if P else None
-    if peak is not None and peak > -1.0: problems.append(f'true peak {peak} dBTP > -1.0 (AAC overshoot / clipping risk)')
+    lufs, peak = loudness(path)
+    ms = (tl or {}).get('master') or MASTER_DEFAULT
+    silent_film = tl is not None and not (tl.get('music') or {}).get('file')
+    if not silent_film:
+        if lufs is None or abs(lufs - ms['lufs']) > ms['tolerance']:
+            problems.append(f'integrated loudness {lufs} LUFS outside {ms["lufs"]} ±{ms["tolerance"]}')
+        if peak is None or peak > ms['truePeak']:
+            problems.append(f'true peak {peak} dBTP > {ms["truePeak"]} dBTP')
     rep = {'file': str(path), 'passed': not problems, 'problems': problems, 'sizeBytes': path.stat().st_size, 'durationSeconds': float(m['format']['duration']),
            'video': {k: v.get(k) for k in ('codec_name', 'profile', 'pix_fmt', 'width', 'height', 'r_frame_rate', 'nb_frames', 'bit_rate')},
            'audio': a and {k: a.get(k) for k in ('codec_name', 'sample_rate', 'channels', 'bit_rate')},
-           'loudnessLUFS': float(I[-1]) if I else None, 'truePeakDbfs': peak, 'faststart': moov_first(path)}
+           'loudnessLUFS': lufs, 'truePeakDbtp': peak, 'loudnessTarget': ms, 'faststart': moov_first(path)}
     if root: write(root / 'build/delivery-report.json', rep)
     print(('PASS' if not problems else 'FAIL') + f'  {path}  {rep["durationSeconds"]:.3f}s  {rep["sizeBytes"] / 1e6:.1f} MB  LUFS {rep["loudnessLUFS"]}  peak {peak}')
     for p in problems: print('  - ' + p)
@@ -352,14 +416,45 @@ def finish(root, out=None):
             (tl['music'].get('file') and read(mr).get('inputSha256') != sha(inside(root, tl['music']['file']))):
         mix(root)
     final = root / 'build/final.mp4'
-    run(['ffmpeg', '-hide_banner', '-y', '-v', 'error', '-i', silent, '-i', root / 'build/mix.wav', '-map', '0:v:0', '-map', '1:a:0',
-         '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-movflags', '+faststart', final])
+    mux = lambda: run(['ffmpeg', '-hide_banner', '-y', '-v', 'error', '-i', silent, '-i', root / 'build/mix.wav', '-map', '0:v:0', '-map', '1:a:0',
+                       '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-movflags', '+faststart', final])
+    mux()
+    if tl['music'].get('file'):  # AAC can overshoot the PCM true peak: re-master with extra headroom (max 2 tries)
+        for _ in range(2):
+            lufs, peak = loudness(final)
+            if peak is None or peak <= tl['master']['truePeak']:
+                break
+            margin = round(read(root / 'build/mix-report.json').get('truePeakMargin', 0) + peak - tl['master']['truePeak'] + 0.2, 2)
+            print(f'AAC true peak {peak} dBTP > {tl["master"]["truePeak"]}: re-mastering with {margin} dB extra headroom')
+            mix(root, tp_margin=margin); mux()
     rep = validate(final, root)
     write(root / 'build/finalization.json', {'finalSha256': sha(final), 'renderReportSha256': sha(root / 'build/render-report.json'),
                                              'mixSha256': sha(root / 'build/mix.wav'), 'lock': tl['lock'], 'timelineSha256': sha(tlp)})
     if out:
         shutil.copy2(final, out); print(f'copied → {out}')
     return rep
+
+
+# ---------------------------------------------------------------- style gate (A/B/C stills before the full render)
+def styles(root, shot, t=None, which=None, out=None):
+    tl, _ = compile_timeline(root, True)
+    sc = next((s for s in tl['scenes'] if s['id'] == shot), None)
+    if not sc:
+        raise XmsError(f'--shot must be one of: {", ".join(s["id"] for s in tl["scenes"])}')
+    themes = read(KIT / 'lib/themes.json')
+    order = which.split(',') if which else themes.get('styleOrder', list(themes['styles']))[:3]
+    bad = [x for x in order if x not in themes['styles']]
+    if bad or not 2 <= len(order) <= 4:
+        raise XmsError(f'--styles needs 2–4 known presets ({", ".join(themes["styles"])}); got {order}')
+    dur = sc['durationFrames'] / tl['fps']
+    if t is None:  # default: the settled moment after the last hit (the shot's "key frame")
+        t = min(dur - 0.5, max(sc['hits']) + 0.9) if sc.get('hits') else dur * 0.6  # stay clear of the 0.3 s exit
+    frame = max(sc['startFrame'], min(sc['endFrame'] - 1, sc['startFrame'] + round(float(t) * tl['fps'])))
+    dest = Path(out).resolve() if out else root / '.xms/draft/styles' / f'styles-{shot}.png'
+    node_tool([root, '--mode', 'styles', '--draft', '--frame', str(frame), '--styles', ','.join(order), '--shot', shot, '--out', dest])
+    print('next: show this sheet to the user and WAIT for their pick (A/B/C); then set storyboard.json "style" to the picked id:')
+    for i, x in enumerate(order):
+        print(f'  {"ABCD"[i]} = "{x}"  {themes["styles"][x]["label"]} · {themes["styles"][x].get("en", "")}')
 
 
 # ---------------------------------------------------------------- scaffolding
@@ -426,6 +521,7 @@ def main():
     ap.add_argument('--draft', action='store_true'); ap.add_argument('--json', action='store_true')
     ap.add_argument('--note'); ap.add_argument('--out'); ap.add_argument('--theme'); ap.add_argument('--title'); ap.add_argument('--project')
     ap.add_argument('--workers'); ap.add_argument('--resume', action='store_true'); ap.add_argument('--lossless', action='store_true'); ap.add_argument('--jpeg', action='store_true'); ap.add_argument('--frame'); ap.add_argument('--port'); ap.add_argument('--crop-y')
+    ap.add_argument('--shot'); ap.add_argument('--t', type=float); ap.add_argument('--styles')
     a, rest = ap.parse_known_args()
     root = Path(a.target).resolve()
     extra = (['--workers', a.workers] if a.workers else []) + (['--resume'] if a.resume else []) + (['--lossless'] if a.lossless else []) + (['--jpeg'] if a.jpeg else [])
@@ -464,6 +560,10 @@ def main():
     elif c == 'mix': mix(root, a.draft)
     elif c == 'finish': finish(root, a.out)
     elif c == 'validate': validate(Path(a.target), Path(a.project).resolve() if a.project else None)
+    elif c == 'styles':
+        if not a.shot: ap.error('styles needs --shot <scene id>')
+        styles(root, a.shot, a.t, a.styles, a.out)
+    elif c == 'cutout': run([py(), KIT / 'tools/cutout.py', root] + (['--out', a.out] if a.out else []) + rest)
     else: ap.error(f'unknown command {c}')
 
 

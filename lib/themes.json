@@ -2,48 +2,245 @@
   "schema": "xms/themes-v1",
   "presets": {
     "xhs-9x16": {
-      "width": 1080, "height": 1920, "fps": 30, "margin": 60,
+      "width": 1080,
+      "height": 1920,
+      "fps": 30,
+      "margin": 60,
       "uiZones": {
-        "top":    {"x": 0,   "y": 0,    "w": 1080, "h": 140, "note": "状态栏 / 返回 / 分享"},
-        "bottom": {"x": 0,   "y": 1660, "w": 1080, "h": 260, "note": "作者 / 文案 / 互动栏"},
-        "right":  {"x": 960, "y": 1000, "w": 120,  "h": 660, "note": "点赞 / 收藏 / 评论按钮列"}
+        "top": {
+          "x": 0,
+          "y": 0,
+          "w": 1080,
+          "h": 140,
+          "note": "状态栏 / 返回 / 分享"
+        },
+        "bottom": {
+          "x": 0,
+          "y": 1660,
+          "w": 1080,
+          "h": 260,
+          "note": "作者 / 文案 / 互动栏"
+        },
+        "right": {
+          "x": 960,
+          "y": 1000,
+          "w": 120,
+          "h": 660,
+          "note": "点赞 / 收藏 / 评论按钮列"
+        }
       },
-      "type": {"title": [96, 124], "body": [52, 64], "minReadable": 40}
+      "type": {
+        "title": [
+          96,
+          124
+        ],
+        "body": [
+          52,
+          64
+        ],
+        "minReadable": 40
+      }
     },
-    "cover-3x4": {"width": 1080, "height": 1440, "fromPreset": "xhs-9x16", "cropY": 240}
+    "cover-3x4": {
+      "width": 1080,
+      "height": 1440,
+      "fromPreset": "xhs-9x16",
+      "cropY": 240
+    }
   },
   "contrastPairs": [
-    ["ink", "paper2"], ["support", "paper2"], ["accentText", "paper2"], ["accentText", "panel"],
-    ["second", "paper2"], ["third", "paper2"], ["support", "card"], ["ink", "accent"],
-    ["onDark", "second"], ["onDark", "third"], ["accentOnDark", "third"], ["onDarkSoft", "third"]
+    [
+      "ink",
+      "paper2"
+    ],
+    [
+      "support",
+      "paper2"
+    ],
+    [
+      "accentText",
+      "paper2"
+    ],
+    [
+      "accentText",
+      "panel"
+    ],
+    [
+      "second",
+      "paper2"
+    ],
+    [
+      "third",
+      "paper2"
+    ],
+    [
+      "support",
+      "card"
+    ],
+    [
+      "ink",
+      "accent"
+    ],
+    [
+      "onDark",
+      "second"
+    ],
+    [
+      "onDark",
+      "third"
+    ],
+    [
+      "accentOnDark",
+      "third"
+    ],
+    [
+      "onDarkSoft",
+      "third"
+    ]
   ],
   "themes": {
     "editorial-amber": {
       "label": "暖纸编辑风（默认）",
-      "paper": "#F4F1EA", "paper2": "#EDE6D8", "panel": "#FBF9F4", "card": "#FFFFFF",
-      "ink": "#16181D", "support": "#4A4F57",
-      "accent": "#E85D04", "accentText": "#B93D08", "accentOnDark": "#F59A4A",
-      "second": "#1F4E5F", "third": "#24324A",
-      "line": "#D9D1C1", "mute": "#CFC6B4", "onDark": "#FFFFFF", "onDarkSoft": "#E7E3DA",
-      "halo": "rgba(250,248,243,0.92)", "warm": "#F2A65A"
+      "paper": "#F4F1EA",
+      "paper2": "#EDE6D8",
+      "panel": "#FBF9F4",
+      "card": "#FFFFFF",
+      "ink": "#16181D",
+      "support": "#4A4F57",
+      "accent": "#E85D04",
+      "accentText": "#B93D08",
+      "accentOnDark": "#F59A4A",
+      "second": "#1F4E5F",
+      "third": "#24324A",
+      "line": "#D9D1C1",
+      "mute": "#CFC6B4",
+      "onDark": "#FFFFFF",
+      "onDarkSoft": "#E7E3DA",
+      "halo": "rgba(250,248,243,0.92)",
+      "warm": "#F2A65A"
     },
     "mint-notes": {
       "label": "薄荷笔记风",
-      "paper": "#F1F6F2", "paper2": "#E3EEE6", "panel": "#F9FCFA", "card": "#FFFFFF",
-      "ink": "#132019", "support": "#44524B",
-      "accent": "#1FA77F", "accentText": "#0B6F52", "accentOnDark": "#7BE3BF",
-      "second": "#2D4A8A", "third": "#2A2F4F",
-      "line": "#CFDDD3", "mute": "#BFD0C5", "onDark": "#FFFFFF", "onDarkSoft": "#E2E8F0",
-      "halo": "rgba(247,251,248,0.92)", "warm": "#F2B84B"
+      "paper": "#F1F6F2",
+      "paper2": "#E3EEE6",
+      "panel": "#F9FCFA",
+      "card": "#FFFFFF",
+      "ink": "#132019",
+      "support": "#44524B",
+      "accent": "#1FA77F",
+      "accentText": "#0B6F52",
+      "accentOnDark": "#7BE3BF",
+      "second": "#2D4A8A",
+      "third": "#2A2F4F",
+      "line": "#CFDDD3",
+      "mute": "#BFD0C5",
+      "onDark": "#FFFFFF",
+      "onDarkSoft": "#E2E8F0",
+      "halo": "rgba(247,251,248,0.92)",
+      "warm": "#F2B84B"
     },
     "sky-memo": {
       "label": "晴空便签风",
-      "paper": "#F2F5FA", "paper2": "#E4EAF4", "panel": "#F8FAFD", "card": "#FFFFFF",
-      "ink": "#141A26", "support": "#475063",
-      "accent": "#5B93F6", "accentText": "#1F4FBF", "accentOnDark": "#9CC0FF",
-      "second": "#B4400B", "third": "#1E293B",
-      "line": "#D3DCEA", "mute": "#C3CEDF", "onDark": "#FFFFFF", "onDarkSoft": "#E2E8F0",
-      "halo": "rgba(246,248,252,0.92)", "warm": "#F5A524"
+      "paper": "#F2F5FA",
+      "paper2": "#E4EAF4",
+      "panel": "#F8FAFD",
+      "card": "#FFFFFF",
+      "ink": "#141A26",
+      "support": "#475063",
+      "accent": "#5B93F6",
+      "accentText": "#1F4FBF",
+      "accentOnDark": "#9CC0FF",
+      "second": "#B4400B",
+      "third": "#1E293B",
+      "line": "#D3DCEA",
+      "mute": "#C3CEDF",
+      "onDark": "#FFFFFF",
+      "onDarkSoft": "#E2E8F0",
+      "halo": "rgba(246,248,252,0.92)",
+      "warm": "#F5A524"
+    },
+    "flat-pop": {
+      "label": "扁平明快",
+      "paper": "#F7F8FB",
+      "paper2": "#EEF1F7",
+      "panel": "#FFFFFF",
+      "card": "#FFFFFF",
+      "ink": "#1B2333",
+      "support": "#4B5568",
+      "accent": "#FF6B4A",
+      "accentText": "#C2381B",
+      "accentOnDark": "#FFA48F",
+      "second": "#2F5BEA",
+      "third": "#1B2A4A",
+      "line": "#DCE2EC",
+      "mute": "#C9D1DE",
+      "onDark": "#FFFFFF",
+      "onDarkSoft": "#E6EAF2",
+      "halo": "rgba(247,248,251,0.92)",
+      "warm": "#FFB547"
+    },
+    "riso-ink": {
+      "label": "孔版双色",
+      "paper": "#F5EFE0",
+      "paper2": "#EDE4CF",
+      "panel": "#FBF7EE",
+      "card": "#FFFDF7",
+      "ink": "#1A1F3A",
+      "support": "#474C63",
+      "accent": "#FF48B0",
+      "accentText": "#B3126F",
+      "accentOnDark": "#FF9AD3",
+      "second": "#005B96",
+      "third": "#1A1F3A",
+      "line": "#DDD2B8",
+      "mute": "#CFC3A6",
+      "onDark": "#FFFFFF",
+      "onDarkSoft": "#ECE6F0",
+      "halo": "rgba(245,239,224,0.92)",
+      "warm": "#FFE14D"
     }
-  }
+  },
+  "styles": {
+    "editorial-paper": {
+      "label": "编辑纸张风",
+      "en": "Editorial paper",
+      "theme": "editorial-amber",
+      "background": "paper",
+      "grain": true,
+      "grainInk": 0.07,
+      "shadow": "soft",
+      "misregister": 0,
+      "cardRadius": 28,
+      "note": "暖纸底 + 流动纸纹 + 细颗粒 + 柔和投影，杂志排版感"
+    },
+    "flat-illustration": {
+      "label": "扁平插画风",
+      "en": "Clean flat illustration",
+      "theme": "flat-pop",
+      "background": "flat",
+      "grain": false,
+      "grainInk": 0,
+      "shadow": "flat",
+      "misregister": 0,
+      "cardRadius": 40,
+      "note": "干净浅底 + 大色块圆形 + 无颗粒 + 实色描边，扁平插画感"
+    },
+    "riso-print": {
+      "label": "孔版印刷风",
+      "en": "Risograph / halftone print",
+      "theme": "riso-ink",
+      "background": "halftone",
+      "grain": true,
+      "grainInk": 0.12,
+      "shadow": "offset",
+      "misregister": 3,
+      "cardRadius": 18,
+      "note": "米色纸 + 网点 + 荧光粉/蓝双色套印错位 + 硬投影，印刷品质感"
+    }
+  },
+  "styleOrder": [
+    "editorial-paper",
+    "flat-illustration",
+    "riso-print"
+  ]
 }
